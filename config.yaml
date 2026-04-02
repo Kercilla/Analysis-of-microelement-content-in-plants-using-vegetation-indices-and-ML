@@ -1,0 +1,150 @@
+# ═══════════════════════════════════════════════════════════
+#  config.yaml
+# ═══════════════════════════════════════════════════════════
+
+# ── Пути к данным ──────────────────────────────────────────
+
+paths:
+  # Мультиспектральные .gpkg файлы
+  multi:
+    date1: "data/multi/1?_05_29.gpkg"      # Дата 1: 29 мая 2023
+    date2: "data/multi/1?_06_08.gpkg"      # Дата 2: 08 июня 2023
+
+  # Гиперспектральные данные
+  hyper:
+    date1_folder: "data/hyper/20230529"     # Папка с подпапками наборов
+    date2_folder: "data/hyper/20230608"
+    wavelength_map: "data/hyper/giper_polygon.xlsx"
+    # Собранные xlsx (если папки недоступны)
+    date1_xlsx: "data/hyper/giper_point.xlsx"
+    # date2_xlsx: "data/hyper/giper_point_0608.xlsx"
+
+  # Химический анализ
+  chemistry:
+    sampling1: "data/chem/Митрофанов_Е___раст__пшеницы__1_отбор_.doc"
+    sampling2: "data/chem/Митрофанов_Е___раст__пшеницы__2_отбор_.doc"
+
+  # Выходные папки
+  output:
+    stat_multi:  "results/01_stat_multi"
+    stat_hyper:  "results/02_stat_hyper"
+    ml_multi:    "results/03_ml_multi"
+    ml_hyper:    "results/04_ml_hyper"
+    ml_fusion:   "results/05_ml_fusion"
+
+
+# ── Камера MicaSense RedEdge-M ─────────────────────────────
+
+camera:
+  name: "MicaSense RedEdge-M"
+  band_map:
+    "11": "Blue"
+    "12": "Green"
+    "13": "Red"
+    "14": "RedEdge"
+    "15": "NIR"
+  wavelengths:
+    Blue: 475.0
+    Green: 560.0
+    Red: 668.0
+    RedEdge: 717.0
+    NIR: 840.0
+
+
+# ── Гиперспектр: правила парсинга имён файлов ─────────────
+
+hyper_naming:
+  prefix_length: 1            # сколько символов убрать для получения номера канала
+  file_extension: ".gpkg"
+  # Столбцы в .gpkg
+  value_column: "_mean"
+  id_column: "id"
+  # Минимум валидных каналов для включения точки
+  min_valid_bands: 50
+
+
+# ── Химический анализ ──────────────────────────────────────
+
+chemistry:
+  # ID offset: для 2-го отбора пробы 101-200 → точки 1-100
+  id_offsets:
+    sampling1: 0
+    sampling2: 100
+  columns:
+    - "Биомасса_сырая_г"
+    - "Биомасса_сухая_г"
+    - "Влажность_%"
+    - "Сырая_зола_%"
+    - "N_%"
+    - "P_%"
+    - "K_%"
+    - "Ca_%"
+    - "Mg_%"
+    - "S_%"
+    - "Нитраты_мг_кг"
+    - "Fe_мг_кг"
+    - "Mn_мг_кг"
+    - "Cu_мг_кг"
+    - "Zn_мг_кг"
+    - "Co_мг_кг"
+  target_elements:
+    - "N_%"
+    - "P_%"
+    - "K_%"
+    - "Ca_%"
+    - "Mg_%"
+    - "S_%"
+    - "Нитраты_мг_кг"
+    - "Fe_мг_кг"
+    - "Mn_мг_кг"
+    - "Cu_мг_кг"
+    - "Zn_мг_кг"
+    - "Co_мг_кг"
+  short_names:
+    "N_%": "N"
+    "P_%": "P"
+    "K_%": "K"
+    "Ca_%": "Ca"
+    "Mg_%": "Mg"
+    "S_%": "S"
+    "Нитраты_мг_кг": "NO₃"
+    "Fe_мг_кг": "Fe"
+    "Mn_мг_кг": "Mn"
+    "Cu_мг_кг": "Cu"
+    "Zn_мг_кг": "Zn"
+    "Co_мг_кг": "Co"
+  date_sampling_map:
+    "date1": "sampling1"
+    "date2": "sampling2"
+    "05_29": "sampling1"
+    "06_08": "sampling2"
+    "20230529": "sampling1"
+    "20230608": "sampling2"
+
+
+# ── Параметры статистического анализа ──────────────────────
+
+statistics:
+  methods: ["pearson", "spearman", "kendall"]
+  alpha: 0.05
+  index_tiers: [1, 2, 3]      # Тиры вегетативных индексов
+  min_samples: 10              # Мин. точек для корреляции
+  scatter_top_n: 12
+
+# Предобработки гиперспектра
+hyper_preprocessing:
+  variants:
+    raw:        ["smooth"]
+    deriv1:     ["smooth", "deriv1"]
+    deriv1_snv: ["smooth", "deriv1", "snv"]
+    snv:        ["snv"]
+    deriv2:     ["smooth", "deriv2"]
+  sg_window: 11
+  sg_polyorder: 2
+
+
+# ── Визуализация ───────────────────────────────────────────
+
+plots:
+  dpi: 150
+  format: "png"
