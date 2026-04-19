@@ -1,5 +1,3 @@
-
-
 import re
 import subprocess
 from pathlib import Path
@@ -9,12 +7,7 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 
-
-# ═══════════════════════════════════════════════════════════
-#  Мультиспектр
-# ═══════════════════════════════════════════════════════════
-
-def load_multispectral_date(
+def load_multi(
     gpkg_pattern: str,
     band_map: dict[str, str],
     value_col: str = "_mean",
@@ -46,11 +39,6 @@ def load_multispectral_date(
     df.index.name = "id"
     return df
 
-
-# ═══════════════════════════════════════════════════════════
-#  Гиперспектр: агрегация из папки с подпапками
-# ═══════════════════════════════════════════════════════════
-
 def _parse_hyper_channel(filename: str, prefix_len: int = 1) -> int | None:
     
     stem = Path(filename).stem
@@ -60,7 +48,6 @@ def _parse_hyper_channel(filename: str, prefix_len: int = 1) -> int | None:
     if not channel_str:
         return None
     return int(channel_str)
-
 
 def load_hyper_wavelength_map(xlsx_path: str) -> dict[int, float]:
     
@@ -73,7 +60,6 @@ def load_hyper_wavelength_map(xlsx_path: str) -> dict[int, float]:
         if val is not None and isinstance(val, (int, float)):
             wl_map[i] = float(val)
     return wl_map
-
 
 def load_hyper_date(
     date_folder: str,
@@ -94,7 +80,6 @@ def load_hyper_date(
     if not subfolders:
         raise ValueError(f"Нет подпапок в {date_folder}")
 
-    # {point_id: {channel_num: [list of values from different sets]}}
     all_values = defaultdict(lambda: defaultdict(list))
     sets_with_data = 0
 
@@ -127,12 +112,10 @@ def load_hyper_date(
         if set_has_data:
             sets_with_data += 1
 
-        # Прогресс
         if (si + 1) % 20 == 0 or si == len(subfolders) - 1:
             print(f"    Прочитано {si+1}/{len(subfolders)} наборов "
                   f"({sets_with_data} с данными)")
 
-    # Агрегация: среднее по наборам
     sorted_channels = sorted(wl_map.keys())
     wavelengths = np.array([wl_map[ch] for ch in sorted_channels])
     col_names = [f"{wl_map[ch]:.2f}" for ch in sorted_channels]
@@ -168,29 +151,73 @@ def load_hyper_date(
 
     return df, wavelengths
 
-
 def load_hyper_from_xlsx(xlsx_path: str) -> tuple[pd.DataFrame, np.ndarray]:
-    """Загружает уже собранный гиперспектр из xlsx (giper_point.xlsx)."""
     import openpyxl
     wb = openpyxl.load_workbook(xlsx_path)
     ws = wb[wb.sheetnames[0]]
 
     wl_row = [cell.value for cell in ws[1]]
+
+    # Auto-detect: find first column where numeric values in range 300-2500 nm start
+    def _to_float(v):
+        if v is None:
+            return None
+        if isinstance(v, (int, float)):
+            return float(v)
+        try:
+            return float(str(v).strip())
+        except (ValueError, TypeError):
+            return None
+
+    wl_start = None
+    for i, v in enumerate(wl_row):
+        fv = _to_float(v)
+        if fv is not None and 300 <= fv <= 2500:
+            wl_start = i
+            break
+
+    if wl_start is None:
+        for i, v in enumerate(wl_row):
+            if _to_float(v) is not None:
+                wl_start = i
+                break
+
+    if wl_start is None:
+        raise ValueError(
+            f"load_hyper_from_xlsx: не найдены длины волн в первой строке файла {xlsx_path}. "
+            f"Первые 10 значений заголовка: {wl_row[:10]}"
+        )
+
     wavelengths = np.array([
-        float(w) for w in wl_row[4:]
-        if w is not None and isinstance(w, (int, float))
+        fv for v in wl_row[wl_start:]
+        if (fv := _to_float(v)) is not None
     ])
+
+    # id column: search for first column containing sequential integers (sample IDs)
+    # Try column index 1 first (standard), then scan
+    id_col = 1
+    for row in ws.iter_rows(min_row=3, max_row=min(5, ws.max_row), values_only=True):
+        if row[1] is not None and isinstance(row[1], (int, float)):
+            id_col = 1
+            break
+        if row[0] is not None and isinstance(row[0], (int, float)):
+            id_col = 0
+            break
 
     records = {}
     for row in ws.iter_rows(min_row=3, max_row=ws.max_row, values_only=True):
-        if row[1] is None or not isinstance(row[1], (int, float)):
+        if row[id_col] is None:
             continue
-        pid = int(row[1])
-        if len(row) > 4 and row[4] == "stdev":
+        pid_f = _to_float(row[id_col])
+        if pid_f is None:
+            continue
+        pid = int(pid_f)
+        # Skip stdev rows: check cell just before wl_start
+        if wl_start > 0 and str(row[wl_start - 1]).strip().lower() == "stdev":
             continue
         spectrum = [
-            float(v) if v is not None and isinstance(v, (int, float)) else np.nan
-            for v in row[4:4 + len(wavelengths)]
+            fv if (fv := _to_float(v)) is not None else np.nan
+            for v in row[wl_start:wl_start + len(wavelengths)]
         ]
         if pid not in records:
             records[pid] = []
@@ -206,17 +233,12 @@ def load_hyper_from_xlsx(xlsx_path: str) -> tuple[pd.DataFrame, np.ndarray]:
           f"({wavelengths[0]:.0f}–{wavelengths[-1]:.0f} нм)")
     return df, wavelengths
 
-
-# ═══════════════════════════════════════════════════════════
-#  Химический анализ
-# ═══════════════════════════════════════════════════════════
-
 def load_chemistry_doc(
     filepath: str,
     columns: list[str],
     id_offset: int = 0,
 ) -> pd.DataFrame:
-    """Парсит .doc через antiword."""
+    
     result = subprocess.run(
         ["antiword", "-m", "UTF-8.txt", filepath],
         capture_output=True, text=True,
@@ -251,9 +273,8 @@ def load_chemistry_doc(
     df = pd.DataFrame(samples, columns=["id"] + columns)
     return df.set_index("id").sort_index()
 
-
 def load_chemistry(filepath: str, columns: list[str], id_offset: int = 0) -> pd.DataFrame:
-    """Универсальный загрузчик химии."""
+    
     ext = Path(filepath).suffix.lower()
     if ext == ".doc":
         return load_chemistry_doc(filepath, columns, id_offset)
@@ -265,3 +286,34 @@ def load_chemistry(filepath: str, columns: list[str], id_offset: int = 0) -> pd.
     elif ext == ".csv":
         return pd.read_csv(filepath, index_col=0).sort_index()
     raise ValueError(f"Неподдерживаемый формат: {ext}")
+
+
+def load_hyper_from_csv(csv_path: str) -> tuple[pd.DataFrame, np.ndarray]:
+    df = pd.read_csv(csv_path, index_col=0)
+    df.index.name = "id"
+    wavelengths = np.array([float(c) for c in df.columns])
+    print(f"  Hyper CSV: {len(df)} pts, {len(wavelengths)} bands "
+          f"({wavelengths[0]:.0f}-{wavelengths[-1]:.0f} nm)")
+    return df, wavelengths
+
+
+def load_hyper_auto(cfg, date_key):
+    paths = cfg["paths"]["hyper"]
+    hn = cfg["hyper_naming"]
+
+    for key, loader in [
+        (f"{date_key}_csv", lambda p: load_hyper_from_csv(p)),
+        (f"{date_key}_xlsx", lambda p: load_hyper_from_xlsx(p)),
+    ]:
+        fpath = paths.get(key)
+        if fpath and Path(fpath).exists():
+            return loader(fpath)
+
+    folder = paths.get(f"{date_key}_folder")
+    if folder and Path(folder).exists():
+        wl_map = load_hyper_wavelength_map(paths["wavelength_map"])
+        return load_hyper_date(folder, wl_map, hn["prefix_length"],
+                               hn["value_column"], hn["id_column"],
+                               hn["min_valid_bands"])
+
+    raise FileNotFoundError(f"No hyper data for {date_key}")

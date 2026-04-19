@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════
-#  config.yaml
+#  config.yaml — единый конфиг проекта
 # ═══════════════════════════════════════════════════════════
 
 # ── Пути к данным ──────────────────────────────────────────
@@ -7,22 +7,22 @@
 paths:
   # Мультиспектральные .gpkg файлы
   multi:
-    date1: "data/multi/1?_05_29.gpkg"      # Дата 1: 29 мая 2023
-    date2: "data/multi/1?_06_08.gpkg"      # Дата 2: 08 июня 2023
+    date1: "D:/Diplom_Magistr/experience_2023/multik/20230529/1?_05_29.gpkg"      
+    date2: "D:/Diplom_Magistr/experience_2023/multik/20230608/1?_06_08.gpkg"      
 
   # Гиперспектральные данные
   hyper:
-    date1_folder: "data/hyper/20230529"     # Папка с подпапками наборов
-    date2_folder: "data/hyper/20230608"
-    wavelength_map: "data/hyper/giper_polygon.xlsx"
+    date1_folder: "D:/Diplom_Magistr/experience_2023/Giper/polygon/20230529"
+    date2_folder: "D:/Diplom_Magistr/experience_2023/Giper/polygon/20230608"
+    wavelength_map: "D:/Diplom_Magistr/experience_2023/Giper/polygon/giper_polygon.xlsx"
     # Собранные xlsx (если папки недоступны)
-    date1_xlsx: "data/hyper/giper_point.xlsx"
-    # date2_xlsx: "data/hyper/giper_point_0608.xlsx"
+    #date1_xlsx: "D:/Diplom_Magistr/Analysis of microelement content in plants using vegetation indices and ML/V6/data/hyper/hyper_aggregated_date1.xlsx"
+    #date2_xlsx: "D:/Diplom_Magistr/Analysis of microelement content in plants using vegetation indices and ML/V6/data/hyper/hyper_aggregated_date2.xlsx"
 
   # Химический анализ
   chemistry:
-    sampling1: "data/chem/Митрофанов_Е___раст__пшеницы__1_отбор_.doc"
-    sampling2: "data/chem/Митрофанов_Е___раст__пшеницы__2_отбор_.doc"
+    sampling1: "D:/Diplom_Magistr/experience_2023/Хим_Лаб_АФИ/1_05_29.xlsx"
+    sampling2: "D:/Diplom_Magistr/experience_2023/Хим_Лаб_АФИ/2_06_08.xlsx"
 
   # Выходные папки
   output:
@@ -37,6 +37,8 @@ paths:
 
 camera:
   name: "MicaSense RedEdge-M"
+  # Номер из имени файла → название канала
+  # Файлы: 11_05_29.gpkg, 12_05_29.gpkg, ..., 15_05_29.gpkg
   band_map:
     "11": "Blue"
     "12": "Green"
@@ -54,7 +56,7 @@ camera:
 # ── Гиперспектр: правила парсинга имён файлов ─────────────
 
 hyper_naming:
-  prefix_length: 1            # сколько символов убрать для получения номера канала
+  prefix_length: 1
   file_extension: ".gpkg"
   # Столбцы в .gpkg
   value_column: "_mean"
@@ -69,7 +71,8 @@ chemistry:
   # ID offset: для 2-го отбора пробы 101-200 → точки 1-100
   id_offsets:
     sampling1: 0
-    sampling2: 100
+    sampling2: 0
+  # Названия столбцов в .doc файлах (16 штук после ID)
   columns:
     - "Биомасса_сырая_г"
     - "Биомасса_сухая_г"
@@ -87,6 +90,7 @@ chemistry:
     - "Cu_мг_кг"
     - "Zn_мг_кг"
     - "Co_мг_кг"
+  # Целевые элементы для анализа (без служебных)
   target_elements:
     - "N_%"
     - "P_%"
@@ -100,6 +104,7 @@ chemistry:
     - "Cu_мг_кг"
     - "Zn_мг_кг"
     - "Co_мг_кг"
+  # Короткие имена для графиков
   short_names:
     "N_%": "N"
     "P_%": "P"
@@ -141,6 +146,25 @@ hyper_preprocessing:
     deriv2:     ["smooth", "deriv2"]
   sg_window: 11
   sg_polyorder: 2
+
+
+# ── Параметры ML ───────────────────────────────────────────
+
+ml:
+  multi_pca_components: 15 
+  mixup_n_aug: null
+  models: ["PLSR", "ElasticNet", "RF", "GBR", "SVR", "XGBoost"]
+  cv_folds: 5
+  cv_strategy: "kfold"         # kfold | repeated_kfold | spatial
+  # Feature sets для гиперспектра
+  hyper_feature_sets:
+    - "raw_smooth"
+    - "deriv1_snv"
+    - "pca_10"
+    - "cars_spa_25"
+    - "vip"
+  hyper_pca_components: 10
+  hyper_selected_bands: 25
 
 
 # ── Визуализация ───────────────────────────────────────────

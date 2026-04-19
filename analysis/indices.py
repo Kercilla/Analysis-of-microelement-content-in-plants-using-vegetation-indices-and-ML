@@ -1,26 +1,21 @@
 
-
 from dataclasses import dataclass
 from typing import Callable
 
 import numpy as np
 import pandas as pd
 
-
 @dataclass
 class IndexInfo:
-    """Описание вегетативного индекса."""
+    
     name: str
-    tier: int                     # 1=основной, 2=ценный, 3=экспериментальный
-    formula_str: str              # Формула для документации
-    description: str              # Что измеряет
-    required_bands: list[str]     # Какие каналы нужны
-    func: Callable                # Функция расчёта
+    tier: int                 
+    formula_str: str          
+    description: str          
+    required_bands: list[str] 
+    func: Callable            
 
-
-# Реестр всех зарегистрированных индексов
 INDEX_REGISTRY: dict[str, IndexInfo] = {}
-
 
 def register_index(
     name: str,
@@ -29,7 +24,7 @@ def register_index(
     description: str,
     bands: list[str],
 ):
-    """Декоратор для регистрации вегетативного индекса."""
+    
     def decorator(func):
         INDEX_REGISTRY[name] = IndexInfo(
             name=name,
@@ -42,17 +37,11 @@ def register_index(
         return func
     return decorator
 
-
 def _safe_div(a, b):
-    """Поэлементное деление массивов с защитой от 0."""
+    
     with np.errstate(divide="ignore", invalid="ignore"):
         result = np.where(b != 0, a / b, np.nan)
     return result
-
-
-# ════════════════════════════════════════════════════════════
-#  TIER 1: Основные индексы
-# ════════════════════════════════════════════════════════════
 
 @register_index("NDVI", 1, "(NIR-Red)/(NIR+Red)",
                 "Общий показатель вегетации. Насыщается при LAI>3.",
@@ -60,13 +49,11 @@ def _safe_div(a, b):
 def ndvi(B, G, R, RE, NIR):
     return _safe_div(NIR - R, NIR + R)
 
-
 @register_index("NDRE", 1, "(NIR-RE)/(NIR+RE)",
                 "Хлорофилл/азот. Лучший предиктор N. Не насыщается.",
                 ["NIR", "RedEdge"])
 def ndre(B, G, R, RE, NIR):
     return _safe_div(NIR - RE, NIR + RE)
-
 
 @register_index("GNDVI", 1, "(NIR-Green)/(NIR+Green)",
                 "В 5× чувствительнее к хлорофиллу, чем NDVI.",
@@ -74,13 +61,11 @@ def ndre(B, G, R, RE, NIR):
 def gndvi(B, G, R, RE, NIR):
     return _safe_div(NIR - G, NIR + G)
 
-
 @register_index("CIre", 1, "NIR/RE - 1",
                 "Линейная зависимость с концентрацией хлорофилла.",
                 ["NIR", "RedEdge"])
 def ci_re(B, G, R, RE, NIR):
     return _safe_div(NIR, RE) - 1
-
 
 @register_index("CIgreen", 1, "NIR/Green - 1",
                 "Хлорофилл через зелёный канал.",
@@ -88,13 +73,11 @@ def ci_re(B, G, R, RE, NIR):
 def ci_green(B, G, R, RE, NIR):
     return _safe_div(NIR, G) - 1
 
-
 @register_index("OSAVI", 1, "1.16*(NIR-Red)/(NIR+Red+0.16)",
                 "Коррекция на фон почвы.",
                 ["NIR", "Red"])
 def osavi(B, G, R, RE, NIR):
     return _safe_div(1.16 * (NIR - R), NIR + R + 0.16)
-
 
 @register_index("EVI", 1, "2.5*(NIR-Red)/(NIR+6*Red-7.5*Blue+1)",
                 "Для плотного полога. Атмосферная + почвенная коррекция.",
@@ -102,13 +85,11 @@ def osavi(B, G, R, RE, NIR):
 def evi(B, G, R, RE, NIR):
     return _safe_div(2.5 * (NIR - R), NIR + 6 * R - 7.5 * B + 1)
 
-
 @register_index("EVI2", 1, "2.5*(NIR-Red)/(NIR+2.4*Red+1)",
                 "EVI без Blue канала.",
                 ["NIR", "Red"])
 def evi2(B, G, R, RE, NIR):
     return _safe_div(2.5 * (NIR - R), NIR + 2.4 * R + 1)
-
 
 @register_index("CCCI", 1, "NDRE/NDVI",
                 "Хлорофилл независимо от биомассы. R²=0.97 для N в пшенице.",
@@ -118,17 +99,11 @@ def ccci(B, G, R, RE, NIR):
     ndre_val = _safe_div(NIR - RE, NIR + RE)
     return _safe_div(ndre_val, ndvi_val)
 
-
-# ════════════════════════════════════════════════════════════
-#  TIER 2: Ценные дополнительные
-# ════════════════════════════════════════════════════════════
-
 @register_index("MTCI", 2, "(NIR-RE)/(RE-Red)",
                 "Широкий диапазон чувствительности к хлорофиллу.",
                 ["NIR", "RedEdge", "Red"])
 def mtci(B, G, R, RE, NIR):
     return _safe_div(NIR - RE, RE - R)
-
 
 @register_index("Datt", 2, "(NIR-RE)/(NIR-Red)",
                 "Хлорофилл, отделённый от LAI.",
@@ -136,13 +111,11 @@ def mtci(B, G, R, RE, NIR):
 def datt(B, G, R, RE, NIR):
     return _safe_div(NIR - RE, NIR - R)
 
-
 @register_index("SAVI", 2, "1.5*(NIR-Red)/(NIR+Red+0.5)",
                 "Поправка на почву (L=0.5).",
                 ["NIR", "Red"])
 def savi(B, G, R, RE, NIR):
     return _safe_div((NIR - R), (NIR + R + 0.5)) * 1.5
-
 
 @register_index("WDRVI", 2, "(0.2*NIR-Red)/(0.2*NIR+Red)",
                 "Расширенный динамический диапазон для плотных пологов.",
@@ -150,13 +123,11 @@ def savi(B, G, R, RE, NIR):
 def wdrvi(B, G, R, RE, NIR):
     return _safe_div(0.2 * NIR - R, 0.2 * NIR + R)
 
-
 @register_index("SIPI", 2, "(NIR-Blue)/(NIR-Red)",
                 "Каротиноиды/хлорофилл. Ранний стресс.",
                 ["NIR", "Blue", "Red"])
 def sipi(B, G, R, RE, NIR):
     return _safe_div(NIR - B, NIR - R)
-
 
 @register_index("PSRI", 2, "(Red-Green)/RE",
                 "Старение растений (senescence).",
@@ -164,14 +135,12 @@ def sipi(B, G, R, RE, NIR):
 def psri(B, G, R, RE, NIR):
     return _safe_div(R - G, RE)
 
-
 @register_index("ARI", 2, "1/Green - 1/RE",
                 "Антоцианы. Индикатор дефицита P.",
                 ["Green", "RedEdge"])
 def ari(B, G, R, RE, NIR):
     with np.errstate(divide="ignore", invalid="ignore"):
         return np.where((G != 0) & (RE != 0), 1.0 / G - 1.0 / RE, np.nan)
-
 
 @register_index("TCARI", 2, "3*((RE-Red)-0.2*(RE-Green)*(RE/Red))",
                 "Глубина абсорбции хлорофилла.",
@@ -181,7 +150,6 @@ def tcari(B, G, R, RE, NIR):
         ratio = np.where(R != 0, RE / R, np.nan)
     return 3 * ((RE - R) - 0.2 * (RE - G) * ratio)
 
-
 @register_index("MCARI", 2, "((RE-Red)-0.2*(RE-Green))*(RE/Red)",
                 "Модифицированный коэффициент абсорбции хлорофилла.",
                 ["RedEdge", "Red", "Green"])
@@ -189,7 +157,6 @@ def mcari(B, G, R, RE, NIR):
     with np.errstate(divide="ignore", invalid="ignore"):
         ratio = np.where(R != 0, RE / R, np.nan)
     return ((RE - R) - 0.2 * (RE - G)) * ratio
-
 
 @register_index("TCARI_OSAVI", 2, "TCARI/OSAVI",
                 "Хлорофилл, очищенный от LAI и почвы.",
@@ -199,7 +166,6 @@ def tcari_osavi(B, G, R, RE, NIR):
     o = osavi(B, G, R, RE, NIR)
     return _safe_div(t, o)
 
-
 @register_index("MCARI_OSAVI", 2, "MCARI/OSAVI",
                 "Альтернативный комбинированный хлорофилловый индекс.",
                 ["NIR", "RedEdge", "Red", "Green"])
@@ -207,11 +173,6 @@ def mcari_osavi(B, G, R, RE, NIR):
     m = mcari(B, G, R, RE, NIR)
     o = osavi(B, G, R, RE, NIR)
     return _safe_div(m, o)
-
-
-# ════════════════════════════════════════════════════════════
-#  TIER 3: Экспериментальные
-# ════════════════════════════════════════════════════════════
 
 @register_index("SR", 3, "NIR/Red", "Простой ratio.", ["NIR", "Red"])
 def sr(B, G, R, RE, NIR):
@@ -319,11 +280,6 @@ def rgri(B, G, R, RE, NIR):
 def srpi(B, G, R, RE, NIR):
     return _safe_div(B, R)
 
-
-# ════════════════════════════════════════════════════════════
-#  Основная функция расчёта
-# ════════════════════════════════════════════════════════════
-
 def calculate_indices(
     bands_df: pd.DataFrame,
     tiers: list[int] | None = None,
@@ -339,7 +295,6 @@ def calculate_indices(
     available_bands = set(bands_df.columns)
     results = {}
 
-    # Определяем какие индексы считать
     if indices is not None:
         to_compute = {k: v for k, v in INDEX_REGISTRY.items() if k in indices}
     elif tiers is not None:
@@ -348,7 +303,6 @@ def calculate_indices(
         to_compute = INDEX_REGISTRY
 
     for name, info in to_compute.items():
-        # Проверяем, что все нужные каналы есть
         if not all(b in available_bands for b in info.required_bands):
             continue
 
@@ -362,12 +316,10 @@ def calculate_indices(
     df = pd.DataFrame(results, index=bands_df.index)
     return df
 
-
 def get_indices_by_tier(tier: int) -> list[str]:
-    """Возвращает список индексов данного тира."""
+    
     return [name for name, info in INDEX_REGISTRY.items() if info.tier == tier]
 
-
 def get_index_info(name: str) -> IndexInfo | None:
-    """Возвращает описание индекса."""
+    
     return INDEX_REGISTRY.get(name)

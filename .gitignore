@@ -1,0 +1,50 @@
+# ── Results & outputs (heavy) ──
+results/
+models/
+*.pt
+*.pth
+
+# ── Data files ──
+data/
+*.tif
+*.tiff
+*.gpkg
+*.dbf
+*.shp
+*.shx
+*.prj
+*.qgz
+*.qgs
+
+# ── Processed data ──
+*.xlsx
+*.xls
+*.doc
+
+# ── Python ──
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+venv/
+.venv/
+env/
+
+# ── Jupyter ──
+.ipynb_checkpoints/
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ──
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

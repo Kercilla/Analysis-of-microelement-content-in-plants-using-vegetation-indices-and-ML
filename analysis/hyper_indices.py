@@ -1,29 +1,20 @@
 
-
 import numpy as np
 import pandas as pd
 
-
 def _get_band(spectra: np.ndarray, wavelengths: np.ndarray, target_nm: float) -> np.ndarray:
-    """Извлекает ближайший канал к заданной длине волны."""
+    
     idx = np.argmin(np.abs(wavelengths - target_nm))
     return spectra[:, idx]
-
 
 def _safe_div(a, b):
     with np.errstate(divide="ignore", invalid="ignore"):
         return np.where(b != 0, a / b, np.nan)
 
-
-# ═══════════════════════════════════════════════════════════
-#  Реестр гиперспектральных индексов
-# ═══════════════════════════════════════════════════════════
-
 HYPER_INDEX_REGISTRY = {}
 
-
 def _reg(name, wl_needed, group, formula, description):
-    """Регистрация индекса."""
+    
     def decorator(func):
         HYPER_INDEX_REGISTRY[name] = {
             "func": func,
@@ -34,9 +25,6 @@ def _reg(name, wl_needed, group, formula, description):
         }
         return func
     return decorator
-
-
-# ── Группа 1: Хлорофилл / Азот ───────────────────────────
 
 @_reg("mND705", [750, 705, 445], "chlorophyll",
       "(R750-R705)/(R750+R705-2*R445)",
@@ -66,19 +54,15 @@ def vog2(S, W):
       "λ где dR/dλ максимален в 680-760нм",
       "Red Edge Position — точка перегиба красного края, прямой индикатор хлорофилла/N")
 def rep(S, W):
-    # Ищем длины волн в диапазоне 680-760
     mask = (W >= 680) & (W <= 760)
     if mask.sum() < 3:
         return np.full(S.shape[0], np.nan)
     wl_re = W[mask]
     S_re = S[:, mask]
-    # Первая производная
     dR = np.diff(S_re, axis=1)
     dW = np.diff(wl_re)
     deriv = dR / dW[np.newaxis, :]
-    # Позиция максимума производной
     max_idx = np.argmax(deriv, axis=1)
-    # Интерполяция для субпиксельной точности
     rep_vals = wl_re[:-1][max_idx] + dW[max_idx] / 2
     return rep_vals
 
@@ -141,9 +125,6 @@ def zm(S, W):
 def gi(S, W):
     return _safe_div(_get_band(S, W, 554), _get_band(S, W, 677))
 
-
-# ── Группа 2: Каротиноиды / Стресс ───────────────────────
-
 @_reg("PRI", [531, 570], "stress",
       "(R531-R570)/(R531+R570)",
       "Photochemical Reflectance Index — ксантофилловый цикл, фотосинтетическая эффективность")
@@ -189,9 +170,6 @@ def psri_narrow(S, W):
         _get_band(S, W, 750),
     )
 
-
-# ── Группа 3: Вода / Структура листа ─────────────────────
-
 @_reg("WBI", [900, 970], "water",
       "R900/R970",
       "Water Band Index — содержание воды в листе")
@@ -212,9 +190,6 @@ def ndwi_hyper(S, W):
       "Moisture Stress Index")
 def msi(S, W):
     return _safe_div(_get_band(S, W, 819), _get_band(S, W, 1020))
-
-
-# ── Группа 4: Оптимизированные для микроэлементов ────────
 
 @_reg("R_Fe", [700, 670, 550, 750], "micronutrient",
       "(R700-R670)/(R750-R550)",
@@ -249,11 +224,6 @@ def r_zn(S, W):
 def r_ca(S, W):
     return _safe_div(_get_band(S, W, 798), _get_band(S, W, 750))
 
-
-# ═══════════════════════════════════════════════════════════
-#  Расчёт индексов
-# ═══════════════════════════════════════════════════════════
-
 def calculate_hyper_indices(
     spectra: np.ndarray,
     wavelengths: np.ndarray,
@@ -269,7 +239,6 @@ def calculate_hyper_indices(
             continue
         if groups is not None and info["group"] not in groups:
             continue
-        # Проверяем что нужные длины волн в диапазоне
         if all(wl_range[0] <= wl <= wl_range[1] for wl in info["wavelengths"]):
             to_compute[name] = info
 
@@ -283,9 +252,8 @@ def calculate_hyper_indices(
 
     return pd.DataFrame(results)
 
-
 def list_hyper_indices() -> pd.DataFrame:
-    """Справочная таблица всех гиперспектральных индексов."""
+    
     rows = []
     for name, info in HYPER_INDEX_REGISTRY.items():
         rows.append({

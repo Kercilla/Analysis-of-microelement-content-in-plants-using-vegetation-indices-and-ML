@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+"""Statistical correlation: multispectral indices vs chemistry."""
 import argparse, os, sys, warnings
 from glob import glob
 from pathlib import Path
@@ -8,131 +8,90 @@ warnings.filterwarnings("ignore")
 sys.path.insert(0, str(Path(__file__).parent))
 
 from analysis.cfg import load_config, short_name
-from analysis.loaders import load_multispectral_date, load_chemistry
+from analysis.loaders import load_multi, load_chemistry
 from analysis.indices import calculate_indices
-from analysis.correlation import run_correlation, get_top_correlations
-from analysis.config import AnalysisConfig
-from analysis.visualization import (
-    plot_heatmap, plot_scatter_top, plot_method_comparison, fig_to_bytes,
-)
+from analysis.correlation import AnalysisConfig, run_correlation, get_top_correlations
+from analysis.visualization import plot_heatmap, plot_scatter_top, plot_method_comparison
 
-
-def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--config", default="config.yaml")
-    p.add_argument("--date", nargs="+", default=None, help="Какие даты (ключи из config)")
-    p.add_argument("--elements", nargs="+", default=None)
-    p.add_argument("--output", default=None)
-    args = p.parse_args()
-
+def run(args):
     cfg = load_config(args.config)
-    outdir = args.output or cfg["paths"]["output"]["stat_multi"]
-    os.makedirs(outdir, exist_ok=True)
+    out = args.output or cfg["paths"]["output"]["stat_multi"]
+    os.makedirs(out, exist_ok=True)
 
-    band_map = cfg["camera"]["band_map"]
-    chem_cols = cfg["chemistry"]["columns"]
-    targets = args.elements or cfg["chemistry"]["target_elements"]
-    stat_cfg = cfg["statistics"]
+    bmap = cfg["camera"]["band_map"]
+    cols = cfg["chemistry"]["columns"]
+    elems = args.elements or cfg["chemistry"]["target_elements"]
+    st = cfg["statistics"]
+    dsmap = cfg["chemistry"]["date_sampling_map"]
     dpi = cfg["plots"]["dpi"]
-    date_sampling = cfg["chemistry"]["date_sampling_map"]
 
-    config = AnalysisConfig(
-        methods=stat_cfg["methods"], alpha=stat_cfg["alpha"],
-        index_tiers=stat_cfg["index_tiers"],
-    )
+    acfg = AnalysisConfig(methods=st["methods"], alpha=st["alpha"],
+                          index_tiers=st["index_tiers"])
 
-    # Какие даты обрабатывать
-    dates_to_run = args.date or list(cfg["paths"]["multi"].keys())
+    dates = args.date or list(cfg["paths"]["multi"].keys())
+    all_corr = []
 
-    print("=" * 60)
-    print("01. МУЛЬТИСПЕКТР: СТАТИСТИЧЕСКИЙ АНАЛИЗ")
-    print("=" * 60)
-
-    all_results = []
-    for date_key in dates_to_run:
-        pattern = cfg["paths"]["multi"].get(date_key)
-        if not pattern:
-            print(f"  ⚠ Дата '{date_key}' не найдена в config")
+    for dk in dates:
+        pat = cfg["paths"]["multi"].get(dk)
+        if not pat or not glob(pat):
             continue
+        files = sorted(glob(pat))
+        print(f"[{dk}] {len(files)} files")
 
-        files = sorted(glob(pattern))
-        if not files:
-            print(f"  ⚠ Нет файлов: {pattern}")
-            continue
+        df_bands = load_multi(pat, bmap)
+        df_idx = calculate_indices(df_bands, tiers=st["index_tiers"])
 
-        print(f"\n  Дата: {date_key} ({len(files)} файлов)")
-
-        # Загрузка мультиспектра
-        bands_df = load_multispectral_date(pattern, band_map)
-        print(f"  Каналы: {list(bands_df.columns)}, точек: {len(bands_df)}")
-
-        # Загрузка химии (определяем какой отбор)
-        # Извлекаем дату из паттерна для маппинга
-        date_str = None
-        for dk, sv in date_sampling.items():
-            if dk in pattern or dk == date_key:
-                date_str = dk
+        sk = dsmap.get(dk, "sampling1")
+        for k, v in dsmap.items():
+            if k in pat:
+                sk = v
                 break
+        cp = cfg["paths"]["chemistry"].get(sk)
+        if not cp or not Path(cp).exists():
+            continue
+        off = cfg["chemistry"]["id_offsets"].get(sk, 0)
+        df_chem = load_chemistry(cp, cols, off)
 
-        sampling_key = date_sampling.get(date_str, "sampling1")
-        chem_path = cfg["paths"]["chemistry"].get(sampling_key)
-        if not chem_path or not Path(chem_path).exists():
-            print(f"  ⚠ Химия не найдена: {chem_path}")
+        ids = df_idx.index.intersection(df_chem.index)
+        if len(ids) < st["min_samples"]:
+            print(f"  skip: {len(ids)} pts < {st['min_samples']}")
             continue
 
-        offset = cfg["chemistry"]["id_offsets"].get(sampling_key, 0)
-        chem_df = load_chemistry(chem_path, chem_cols, offset)
-        print(f"  Химия: {len(chem_df)} проб (offset={offset})")
+        avail = [e for e in elems if e in df_chem.columns]
+        corr = run_correlation(df_idx.loc[ids], df_chem.loc[ids], avail, acfg)
+        corr["date"] = dk
+        all_corr.append(corr)
 
-        # Индексы
-        indices_df = calculate_indices(bands_df, tiers=stat_cfg["index_tiers"])
-        common = indices_df.index.intersection(chem_df.index)
-        print(f"  Индексов: {len(indices_df.columns)}, общих: {len(common)}")
+        for m in st["methods"]:
+            fig = plot_heatmap(corr, m, title=f"{m} {dk}")
+            fig.savefig(f"{out}/heatmap_{m}_{dk}.png", dpi=dpi, bbox_inches="tight")
 
-        if len(common) < stat_cfg["min_samples"]:
-            print(f"  Мало точек, пропуск")
-            continue
+        fig = plot_scatter_top(corr, df_idx.loc[ids], df_chem.loc[ids],
+                               st["scatter_top_n"], title=f"top {dk}")
+        fig.savefig(f"{out}/scatter_{dk}.png", dpi=dpi, bbox_inches="tight")
 
-        # Корреляция
-        corr = run_correlation(
-            indices_df.loc[common], chem_df.loc[common],
-            [t for t in targets if t in chem_df.columns], config,
-        )
-        corr["date"] = date_key
-        all_results.append(corr)
+        fig = plot_method_comparison(corr)
+        fig.savefig(f"{out}/methods_{dk}.png", dpi=dpi, bbox_inches="tight")
 
-        # Графики
-        for method in stat_cfg["methods"]:
-            fig = plot_heatmap(corr, method, title=f"{method} — {date_key}")
-            fig.savefig(Path(outdir) / f"heatmap_{method}_{date_key}.png",
-                        dpi=dpi, bbox_inches="tight")
-
-        fig = plot_scatter_top(corr, indices_df.loc[common], chem_df.loc[common],
-                               stat_cfg["scatter_top_n"],
-                               title=f"Top-{stat_cfg['scatter_top_n']} — {date_key}")
-        fig.savefig(Path(outdir) / f"scatter_{date_key}.png", dpi=dpi, bbox_inches="tight")
-
-        fig = plot_method_comparison(corr, title=f"Методы — {date_key}")
-        fig.savefig(Path(outdir) / f"methods_{date_key}.png", dpi=dpi, bbox_inches="tight")
-
-        # Вывод лучших
-        sig = (corr["pearson_p"] < stat_cfg["alpha"]).sum() if "pearson_p" in corr.columns else 0
-        print(f"  Пар: {len(corr)}, значимых: {sig}")
-        for elem in targets:
-            sub = corr[(corr["element"] == elem) & corr["pearson_r"].notna()]
+        nsig = (corr["pearson_p"] < st["alpha"]).sum() if "pearson_p" in corr.columns else 0
+        print(f"  {len(corr)} pairs, {nsig} significant")
+        for el in avail:
+            sub = corr[(corr["element"] == el) & corr["pearson_r"].notna()]
             if sub.empty: continue
-            best = sub.loc[sub["pearson_r"].abs().idxmax()]
-            print(f"    {short_name(cfg, elem):>5s}: {best['index']:>12s} r={best['pearson_r']:+.3f}")
+            b = sub.loc[sub["pearson_r"].abs().idxmax()]
+            print(f"    {short_name(cfg, el):>5}: {b['index']:<12} r={b['pearson_r']:+.3f}")
 
-    # Сохранение
-    if all_results:
-        full = pd.concat(all_results, ignore_index=True)
-        full.to_csv(Path(outdir) / "correlations.csv", index=False, float_format="%.6f")
-        get_top_correlations(full, top_n=3, per_element=True).to_csv(
-            Path(outdir) / "top3.csv", index=False, float_format="%.4f",
-        )
-        print(f"\nГОТОВО → {outdir}/")
-
+    if all_corr:
+        full = pd.concat(all_corr, ignore_index=True)
+        full.to_csv(f"{out}/correlations.csv", index=False, float_format="%.6f")
+        top3 = get_top_correlations(full, top_n=3, per_element=True)
+        top3.to_csv(f"{out}/top3.csv", index=False, float_format="%.4f")
+    print(f"done -> {out}/")
 
 if __name__ == "__main__":
-    main()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--config", default="config.yaml")
+    ap.add_argument("--date", nargs="+")
+    ap.add_argument("--elements", nargs="+")
+    ap.add_argument("--output")
+    run(ap.parse_args())

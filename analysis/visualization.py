@@ -1,6 +1,3 @@
-"""
-Визуализация результатов корреляционного анализа.
-"""
 
 import io
 
@@ -12,9 +9,8 @@ import seaborn as sns
 from .correlation import significance_label
 from .indices import INDEX_REGISTRY, get_indices_by_tier
 
-
 def _setup_style():
-    """Единые настройки стиля для всех графиков."""
+    
     plt.rcParams.update({
         "figure.facecolor": "white",
         "axes.facecolor": "white",
@@ -22,7 +18,6 @@ def _setup_style():
         "axes.titlesize": 12,
         "axes.labelsize": 10,
     })
-
 
 def plot_heatmap(
     corr_df: pd.DataFrame,
@@ -37,7 +32,6 @@ def plot_heatmap(
     p_col = {"pearson": "pearson_p", "spearman": "spearman_p", "kendall": "kendall_p"}[method]
     method_label = {"pearson": "Pearson r", "spearman": "Spearman ρ", "kendall": "Kendall τ"}[method]
 
-    # Порядок индексов по тирам
     ordered_indices = get_indices_by_tier(1) + get_indices_by_tier(2) + get_indices_by_tier(3)
     available = corr_df["index"].unique()
     ordered_indices = [i for i in ordered_indices if i in available]
@@ -50,7 +44,6 @@ def plot_heatmap(
     pivot = pivot.reindex(index=ordered_indices, columns=elements)
     pivot_p = pivot_p.reindex(index=ordered_indices, columns=elements)
 
-    # Аннотации со значимостью
     annot = pivot.copy().astype(str)
     for i in pivot.index:
         for j in pivot.columns:
@@ -62,7 +55,6 @@ def plot_heatmap(
                 sig = significance_label(p_val)
                 annot.loc[i, j] = f"{r_val:.2f}{sig}"
 
-    # Автоподбор высоты
     h = figsize[1] or max(8, len(ordered_indices) * 0.35)
     fig, ax = plt.subplots(figsize=(figsize[0], h))
 
@@ -75,7 +67,6 @@ def plot_heatmap(
         ax=ax, annot_kws={"size": 7},
     )
 
-    # Разделители тиров
     tier_sizes = [
         len([i for i in get_indices_by_tier(t) if i in available])
         for t in [1, 2, 3]
@@ -92,7 +83,6 @@ def plot_heatmap(
 
     plt.tight_layout()
     return fig
-
 
 def plot_scatter_top(
     corr_df: pd.DataFrame,
@@ -154,7 +144,6 @@ def plot_scatter_top(
     plt.tight_layout()
     return fig
 
-
 def plot_distributions(
     df: pd.DataFrame,
     title: str = "",
@@ -189,14 +178,11 @@ def plot_distributions(
     plt.tight_layout()
     return fig
 
-
 def plot_method_comparison(
     corr_df: pd.DataFrame,
     title: str = "",
 ) -> plt.Figure:
-    """
-    Барплот сравнения Pearson/Spearman/Kendall по элементам.
-    """
+    
     _setup_style()
     elements = corr_df["element"].unique()
 
@@ -237,9 +223,8 @@ def plot_method_comparison(
     plt.tight_layout()
     return fig
 
-
 def fig_to_bytes(fig: plt.Figure, format: str = "png", dpi: int = 150) -> bytes:
-    """Конвертирует matplotlib Figure в байты для скачивания."""
+    
     buf = io.BytesIO()
     fig.savefig(buf, format=format, dpi=dpi, bbox_inches="tight")
     buf.seek(0)

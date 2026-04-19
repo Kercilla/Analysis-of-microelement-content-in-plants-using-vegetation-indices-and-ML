@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-
+"""Hyperspectral correlogram analysis + narrowband indices."""
 import argparse, os, sys, warnings
 from pathlib import Path
-import numpy as np, pandas as pd, matplotlib.pyplot as plt
+import numpy as np, pandas as pd, matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy import stats
 warnings.filterwarnings("ignore")
@@ -15,199 +17,164 @@ from analysis.loaders import (
 )
 from analysis.preprocessing import preprocess_pipeline
 from analysis.hyper_indices import calculate_hyper_indices, HYPER_INDEX_REGISTRY
-from analysis.correlation import run_correlation
-from analysis.config import AnalysisConfig
+from analysis.correlation import AnalysisConfig, run_correlation
 
 
-def correlogram(spectra, y, wavelengths):
-    mask = np.isfinite(y)
-    X, yc = spectra[mask], y[mask]
-    rows = []
-    for i, wl in enumerate(wavelengths):
-        b = X[:, i]; v = np.isfinite(b)
+def _corr(spec, y, wl):
+    m = np.isfinite(y)
+    X, yy = spec[m], y[m]
+    out = []
+    for i, w in enumerate(wl):
+        b = X[:, i]
+        v = np.isfinite(b)
         if v.sum() < 10: continue
-        r, p = stats.pearsonr(b[v], yc[v])
-        rho, sp = stats.spearmanr(b[v], yc[v])
-        rows.append({"wl": wl, "idx": i, "r": r, "p": p, "rho": rho, "n": v.sum()})
-    return pd.DataFrame(rows)
+        r, p = stats.pearsonr(b[v], yy[v])
+        rho, _ = stats.spearmanr(b[v], yy[v])
+        out.append({"wl": w, "idx": i, "r": r, "p": p, "rho": rho, "n": v.sum()})
+    return pd.DataFrame(out)
 
 
-def plot_correlogram(prep_cgs, element, sname, output):
+def _plot_cg(cgs, elem, sname, path):
     fig, ax = plt.subplots(figsize=(14, 4))
-    colors = ["#2E75B6", "#E06666", "#70AD47", "#9B59B6", "#F39C12"]
-    for i, (name, cg) in enumerate(prep_cgs.items()):
-        ax.plot(cg["wl"], cg["r"], lw=1.2, color=colors[i%5], label=name, alpha=0.85)
-    ax.axhline(0, color="gray", lw=0.5)
-    for thr in [0.3, -0.3]: ax.axhline(thr, color="gray", lw=0.5, ls=":")
-    for b, c in [(475,"blue"),(560,"green"),(668,"red"),(717,"orange"),(840,"brown")]:
-        ax.axvline(b, color=c, lw=0.7, ls="--", alpha=0.4)
-    ax.set(xlabel="λ, нм", ylabel="Pearson r", ylim=(-0.6, 0.6))
-    ax.set_title(f"Коррелограмма: {sname}"); ax.legend(fontsize=8); ax.grid(alpha=0.2)
-    plt.tight_layout(); fig.savefig(output, dpi=150, bbox_inches="tight"); plt.close(fig)
+    clr = ["#2E75B6", "#E06666", "#70AD47", "#9B59B6", "#F39C12"]
+    for i, (nm, cg) in enumerate(cgs.items()):
+        ax.plot(cg["wl"], cg["r"], lw=1.1, color=clr[i % 5], label=nm, alpha=0.8)
+    ax.axhline(0, color="gray", lw=0.4)
+    for t in (0.3, -0.3):
+        ax.axhline(t, color="gray", lw=0.4, ls=":")
+    for b, c in [(475, "blue"), (560, "green"), (668, "red"),
+                 (717, "orange"), (840, "brown")]:
+        ax.axvline(b, color=c, lw=0.6, ls="--", alpha=0.35)
+    ax.set(xlabel="nm", ylabel="r", ylim=(-0.6, 0.6), title=sname)
+    ax.legend(fontsize=7)
+    ax.grid(alpha=0.15)
+    plt.tight_layout()
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
 
 
-def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--config", default="config.yaml")
-    p.add_argument("--date", nargs="+", default=None)
-    p.add_argument("--use-xlsx", action="store_true", help="Использовать собранный xlsx вместо папки")
-    p.add_argument("--elements", nargs="+", default=None)
-    p.add_argument("--output", default=None)
-    args = p.parse_args()
-
-    cfg = load_config(args.config)
-    outdir = args.output or cfg["paths"]["output"]["stat_hyper"]
-    os.makedirs(outdir, exist_ok=True)
-
-    chem_cols = cfg["chemistry"]["columns"]
-    targets = args.elements or cfg["chemistry"]["target_elements"]
-    preps = cfg["hyper_preprocessing"]["variants"]
-    date_sampling = cfg["chemistry"]["date_sampling_map"]
+def _load_hyper(cfg, dk):
+    hp = cfg["paths"]["hyper"]
     hn = cfg["hyper_naming"]
+    for key, fn in [(f"{dk}_xlsx", load_hyper_from_xlsx)]:
+        p = hp.get(key)
+        if p and Path(p).exists():
+            return fn(p)
+    folder = hp.get(f"{dk}_folder")
+    if folder and Path(folder).exists():
+        wm = load_hyper_wavelength_map(hp["wavelength_map"])
+        return load_hyper_date(folder, wm, hn["prefix_length"],
+                               hn["value_column"], hn["id_column"],
+                               hn["min_valid_bands"])
+    return None, None
+
+
+def run(args):
+    cfg = load_config(args.config)
+    out = args.output or cfg["paths"]["output"]["stat_hyper"]
+    os.makedirs(out, exist_ok=True)
+
+    cols = cfg["chemistry"]["columns"]
+    elems = args.elements or cfg["chemistry"]["target_elements"]
+    pvars = cfg["hyper_preprocessing"]["variants"]
+    dsmap = cfg["chemistry"]["date_sampling_map"]
     dpi = cfg["plots"]["dpi"]
 
-    # Маппинг длин волн
-    wl_map_path = cfg["paths"]["hyper"]["wavelength_map"]
-    wl_map = load_hyper_wavelength_map(wl_map_path)
+    for dk in (args.date or ["date1", "date2"]):
+        print(f"\n[{dk}]")
+        hdf, wl = _load_hyper(cfg, dk)
+        if hdf is None:
+            print("  no data"); continue
 
-    # Какие даты
-    dates = args.date or ["date1", "date2"]
-
-    print("=" * 60)
-    print("02. ГИПЕРСПЕКТР: СТАТИСТИКА + ГИПЕРСПЕКТРАЛЬНЫЕ ИНДЕКСЫ")
-    print("=" * 60)
-
-    for date_key in dates:
-        folder_key = f"{date_key}_folder"
-        folder = cfg["paths"]["hyper"].get(folder_key)
-        xlsx_key = f"{date_key}_xlsx"
-        xlsx_path = cfg["paths"]["hyper"].get(xlsx_key)
-
-        print(f"\n{'━' * 55}")
-        print(f"  Дата: {date_key}")
-
-        # Загрузка гиперспектра
-        if args.use_xlsx and xlsx_path and Path(xlsx_path).exists():
-            hyper_df, wavelengths = load_hyper_from_xlsx(xlsx_path)
-        elif folder and Path(folder).exists():
-            hyper_df, wavelengths = load_hyper_date(
-                folder, wl_map, prefix_len=hn["prefix_length"],
-                value_col=hn["value_column"], id_col=hn["id_column"],
-                min_valid_bands=hn["min_valid_bands"],
-            )
-        elif xlsx_path and Path(xlsx_path).exists():
-            hyper_df, wavelengths = load_hyper_from_xlsx(xlsx_path)
-        else:
-            print(f"  ⚠ Нет данных для {date_key}")
+        sk = dsmap.get(dk, "sampling1")
+        for k, v in dsmap.items():
+            if k in dk or dk in k:
+                sk = v; break
+        cp = cfg["paths"]["chemistry"].get(sk)
+        if not cp or not Path(cp).exists():
+            continue
+        off = cfg["chemistry"]["id_offsets"].get(sk, 0)
+        chem = load_chemistry(cp, cols, off)
+        common = hdf.index.intersection(chem.index).values
+        spec = hdf.loc[common].values
+        print(f"  {len(common)} pts, {spec.shape[1]} bands")
+        if len(common) < 10:
             continue
 
-        # Химия
-        sampling_key = None
-        for dk, sv in date_sampling.items():
-            if dk in date_key or date_key in dk:
-                sampling_key = sv; break
-        if not sampling_key: sampling_key = "sampling1"
-
-        chem_path = cfg["paths"]["chemistry"].get(sampling_key)
-        if not chem_path or not Path(chem_path).exists():
-            print(f"  ⚠ Химия не найдена"); continue
-
-        offset = cfg["chemistry"]["id_offsets"].get(sampling_key, 0)
-        chem_df = load_chemistry(chem_path, chem_cols, offset)
-        common = hyper_df.index.intersection(chem_df.index).values
-        spectra = hyper_df.loc[common].values
-        print(f"  Общих: {len(common)}")
-
-        if len(common) < 10:
-            print(f"  Мало точек"); continue
-
-        # ── A. Коррелограммы r(λ) ──
-        print(f"\n  A. КОРРЕЛОГРАММЫ")
-        all_rows = []
-        for prep_name, steps in preps.items():
-            X, _ = preprocess_pipeline(spectra, wavelengths, steps=steps)
-            print(f"    [{prep_name}]")
-            for elem in targets:
-                if elem not in chem_df.columns: continue
-                y = chem_df.loc[common, elem].values
-                cg = correlogram(X, y, wavelengths)
+        rows = []
+        for pname, steps in pvars.items():
+            Xp, _ = preprocess_pipeline(spec, wl, steps=steps)
+            print(f"  [{pname}]")
+            for el in elems:
+                if el not in chem.columns: continue
+                y = chem.loc[common, el].values
+                cg = _corr(Xp, y, wl)
                 if cg.empty: continue
-                best = cg.loc[cg["r"].abs().idxmax()]
-                sn = short_name(cfg, elem)
-                print(f"      {sn:>5s}: r={best['r']:+.3f} @ {best['wl']:.0f} нм")
-                for _, row in cg.iterrows():
-                    rd = row.to_dict(); rd["element"] = elem; rd["prep"] = prep_name
-                    all_rows.append(rd)
+                bst = cg.loc[cg["r"].abs().idxmax()]
+                print(f"    {short_name(cfg, el):>5}: r={bst['r']:+.3f} @{bst['wl']:.0f}nm")
+                for _, rw in cg.iterrows():
+                    d = rw.to_dict()
+                    d["element"] = el
+                    d["prep"] = pname
+                    rows.append(d)
 
-        # Графики
-        for elem in targets:
-            if elem not in chem_df.columns: continue
-            sn = short_name(cfg, elem)
-            prep_cgs = {}
-            for pn, steps in preps.items():
-                X, _ = preprocess_pipeline(spectra, wavelengths, steps=steps)
-                y = chem_df.loc[common, elem].values
-                prep_cgs[pn] = correlogram(X, y, wavelengths)
-            plot_correlogram(prep_cgs, elem, sn,
-                             str(Path(outdir) / f"correlogram_{sn}_{date_key}.png"))
+        # correlograms per element
+        for el in elems:
+            if el not in chem.columns: continue
+            sn = short_name(cfg, el)
+            pcg = {}
+            for pn, st in pvars.items():
+                Xp, _ = preprocess_pipeline(spec, wl, steps=st)
+                pcg[pn] = _corr(Xp, chem.loc[common, el].values, wl)
+            _plot_cg(pcg, el, sn, f"{out}/correlogram_{sn}_{dk}.png")
 
-        # Тепловая карта
-        raw_cgs = {}
-        X_raw, _ = preprocess_pipeline(spectra, wavelengths, steps=["smooth"])
-        for elem in targets:
-            if elem not in chem_df.columns: continue
-            raw_cgs[elem] = correlogram(X_raw, chem_df.loc[common, elem].values, wavelengths)
+        # heatmap
+        Xr, _ = preprocess_pipeline(spec, wl, steps=["smooth"])
+        raw_cg = {}
+        for el in elems:
+            if el not in chem.columns: continue
+            raw_cg[el] = _corr(Xr, chem.loc[common, el].values, wl)
 
-        matrix = np.zeros((len(raw_cgs), len(wavelengths)))
-        elem_list = list(raw_cgs.keys())
-        for i, elem in enumerate(elem_list):
-            for _, row in raw_cgs[elem].iterrows():
-                matrix[i, int(row["idx"])] = row["r"]
-
-        step = max(1, len(wavelengths) // 50)
+        mat = np.zeros((len(raw_cg), len(wl)))
+        elist = list(raw_cg.keys())
+        for i, el in enumerate(elist):
+            for _, rw in raw_cg[el].iterrows():
+                mat[i, int(rw["idx"])] = rw["r"]
+        step = max(1, len(wl) // 50)
         fig, ax = plt.subplots(figsize=(18, 5))
-        sns.heatmap(matrix, cmap="RdBu_r", center=0, vmin=-0.5, vmax=0.5,
-                    xticklabels=[f"{w:.0f}" if j%step==0 else "" for j,w in enumerate(wavelengths)],
-                    yticklabels=[short_name(cfg, e) for e in elem_list], ax=ax)
-        ax.set_title(f"Корреляция r(λ) — {date_key}")
+        sns.heatmap(mat, cmap="RdBu_r", center=0, vmin=-0.5, vmax=0.5,
+                    xticklabels=[f"{w:.0f}" if j % step == 0 else "" for j, w in enumerate(wl)],
+                    yticklabels=[short_name(cfg, e) for e in elist], ax=ax)
+        ax.set_title(f"r(lambda) {dk}")
         plt.tight_layout()
-        fig.savefig(Path(outdir) / f"heatmap_wl_{date_key}.png", dpi=dpi, bbox_inches="tight")
+        fig.savefig(f"{out}/heatmap_wl_{dk}.png", dpi=dpi, bbox_inches="tight")
         plt.close(fig)
 
-        # ── B. Гиперспектральные индексы ──
-        print(f"\n  B. ГИПЕРСПЕКТРАЛЬНЫЕ ИНДЕКСЫ ({len(HYPER_INDEX_REGISTRY)} шт.)")
-        hi_df = calculate_hyper_indices(spectra, wavelengths)
-        print(f"    Рассчитано: {hi_df.shape[1]} индексов")
-
-        stat_cfg = cfg["statistics"]
-        acfg = AnalysisConfig(methods=stat_cfg["methods"], alpha=stat_cfg["alpha"])
-
-        hi_df.index = common
-        hi_corr = run_correlation(
-            hi_df, chem_df.loc[common],
-            [t for t in targets if t in chem_df.columns], acfg,
-        )
-        hi_corr["date"] = date_key
-
-        for elem in targets:
-            sub = hi_corr[(hi_corr["element"] == elem) & hi_corr["pearson_r"].notna()]
+        # hyper indices
+        print(f"  hyper indices ({len(HYPER_INDEX_REGISTRY)})")
+        hi = calculate_hyper_indices(spec, wl)
+        hi.index = common
+        avail = [e for e in elems if e in chem.columns]
+        acfg = AnalysisConfig(methods=cfg["statistics"]["methods"],
+                              alpha=cfg["statistics"]["alpha"])
+        hcorr = run_correlation(hi, chem.loc[common], avail, acfg)
+        hcorr["date"] = dk
+        for el in avail:
+            sub = hcorr[(hcorr["element"] == el) & hcorr["pearson_r"].notna()]
             if sub.empty: continue
-            best = sub.loc[sub["pearson_r"].abs().idxmax()]
-            sn = short_name(cfg, elem)
-            print(f"    {sn:>5s}: {best['index']:>20s} r={best['pearson_r']:+.3f}")
+            b = sub.loc[sub["pearson_r"].abs().idxmax()]
+            print(f"    {short_name(cfg, el):>5}: {b['index']:<20} r={b['pearson_r']:+.3f}")
+        hcorr.to_csv(f"{out}/hyper_idx_{dk}.csv", index=False, float_format="%.4f")
 
-        hi_corr.to_csv(Path(outdir) / f"hyper_indices_corr_{date_key}.csv",
-                        index=False, float_format="%.4f")
-
-        # Сохранение полной коррелограммы
-        if all_rows:
-            pd.DataFrame(all_rows).to_csv(
-                Path(outdir) / f"correlogram_{date_key}.csv",
-                index=False, float_format="%.6f",
-            )
-
-    print(f"\nГОТОВО → {outdir}/")
-
+        if rows:
+            pd.DataFrame(rows).to_csv(f"{out}/correlogram_{dk}.csv",
+                                       index=False, float_format="%.6f")
+    print(f"done -> {out}/")
 
 if __name__ == "__main__":
-    main()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--config", default="config.yaml")
+    ap.add_argument("--date", nargs="+")
+    ap.add_argument("--elements", nargs="+")
+    ap.add_argument("--output")
+    run(ap.parse_args())
