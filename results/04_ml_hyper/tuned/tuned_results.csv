@@ -1,0 +1,31 @@
+element,model,feature_set,R2_before,R2_after,delta,RMSE,RPD,best_params
+Ca_%,RF,hyper_idx,0.0059,0.1537,0.1478,0.1293,1.0900,"{'max_depth': None, 'min_samples_leaf': 5, 'n_estimators': 500}"
+Ca_%,SVR,hyper_idx,0.0045,-0.0694,-0.0739,0.1454,0.9700,"{'C': 0.1, 'epsilon': 0.1, 'kernel': 'linear'}"
+Ca_%,ElasticNet,pca_10,-0.0139,-0.0988,-0.0849,0.1473,0.9500,"{'alpha': 0.01, 'l1_ratio': 0.5}"
+Co_мг_кг,PLSR,cars_spa,0.3763,-0.3473,-0.7236,0.6138,0.8600,{'n_components': 3}
+Co_мг_кг,PLSR,cars_spa,0.0946,-0.3632,-0.4578,0.4185,0.8600,{'n_components': 3}
+Co_мг_кг,ElasticNet,pca_10,-0.0585,-0.0421,0.0164,0.5398,0.9800,"{'alpha': 1.0, 'l1_ratio': 0.1}"
+Cu_мг_кг,PLSR,cars_spa,0.0335,-0.4839,-0.5174,1.4074,0.8200,{'n_components': 3}
+Cu_мг_кг,RF,cars_spa,0.0018,-0.1457,-0.1475,1.2367,0.9300,"{'max_depth': None, 'min_samples_leaf': 10, 'n_estimators': 300}"
+Cu_мг_кг,ElasticNet,hyper_idx,-0.0145,0.1088,0.1233,1.3401,1.0600,"{'alpha': 0.1, 'l1_ratio': 0.1}"
+Fe_мг_кг,PLSR,cars_spa,0.0474,-0.1398,-0.1872,52.1211,0.9400,{'n_components': 3}
+K_%,SVR,hyper_idx,0.1852,-0.0588,-0.2440,0.6486,0.9700,"{'C': 0.1, 'epsilon': 0.01, 'kernel': 'rbf'}"
+K_%,RF,hyper_idx,0.1714,-0.0330,-0.2044,0.6406,0.9800,"{'max_depth': 10, 'min_samples_leaf': 5, 'n_estimators': 500}"
+K_%,SVR,pca_10,-0.0068,-0.0376,-0.0308,0.6420,0.9800,"{'C': 0.1, 'epsilon': 0.5, 'kernel': 'linear'}"
+Mg_%,PLSR,cars_spa,0.0059,-0.1819,-0.1878,0.0839,0.9200,{'n_components': 3}
+Mg_%,ElasticNet,pca_10,-0.0104,-0.0719,-0.0615,0.0450,0.9700,"{'alpha': 0.1, 'l1_ratio': 0.1}"
+Mn_мг_кг,ElasticNet,pca_10,0.0477,-0.0677,-0.1154,9.9810,0.9700,"{'alpha': 1.0, 'l1_ratio': 0.1}"
+N_%,RF,pca_10,-0.0161,-0.1196,-0.1035,0.6011,0.9500,"{'max_depth': None, 'min_samples_leaf': 5, 'n_estimators': 300}"
+N_%,ElasticNet,pca_10,-0.0205,-0.0891,-0.0686,0.5929,0.9600,"{'alpha': 1.0, 'l1_ratio': 0.1}"
+P_%,ElasticNet,pca_10,-0.0652,0.0284,0.0936,0.0633,1.0100,"{'alpha': 0.1, 'l1_ratio': 0.1}"
+P_%,ElasticNet,cars_spa,-0.0652,0.0284,0.0936,0.0633,1.0100,"{'alpha': 0.1, 'l1_ratio': 0.1}"
+S_%,ElasticNet,pca_10,-0.0193,-0.1738,-0.1545,0.0489,0.9200,"{'alpha': 0.1, 'l1_ratio': 0.5}"
+S_%,ElasticNet,cars_spa,-0.0193,0.4162,0.4355,0.0345,1.3100,"{'alpha': 0.001, 'l1_ratio': 0.9}"
+Zn_мг_кг,ElasticNet,cars_spa,-0.0317,0.1610,0.1927,4.0732,1.0900,"{'alpha': 1.0, 'l1_ratio': 0.5}"
+Zn_мг_кг,SVR,pca_10,-0.0618,-0.1448,-0.0830,4.7578,0.9300,"{'C': 0.1, 'epsilon': 0.5, 'kernel': 'linear'}"
+Zn_мг_кг,SVR,cars_spa,-0.0759,0.0994,0.1753,4.2201,1.0500,"{'C': 0.1, 'epsilon': 0.5, 'kernel': 'linear'}"
+Zn_мг_кг,SVR,hyper_idx,-0.0828,0.0994,0.1822,4.2201,1.0500,"{'C': 0.1, 'epsilon': 0.5, 'kernel': 'linear'}"
+Нитраты_мг_кг,ElasticNet,cars_spa,0.1797,-0.2015,-0.3812,1862.3254,0.9100,"{'alpha': 1.0, 'l1_ratio': 0.1}"
+Нитраты_мг_кг,RF,hyper_idx,0.1771,-0.1624,-0.3395,1831.7325,0.9300,"{'max_depth': None, 'min_samples_leaf': 5, 'n_estimators': 300}"
+Нитраты_мг_кг,ElasticNet,pca_10,0.1225,-0.0653,-0.1878,1753.5676,0.9700,"{'alpha': 1.0, 'l1_ratio': 0.1}"
+Нитраты_мг_кг,GBR,hyper_idx,0.0789,-0.2416,-0.3205,1893.1023,0.9000,"{'learning_rate': 0.01, 'max_depth': 7, 'n_estimators': 100}"

@@ -1,5 +1,5 @@
 # ── Results & outputs (heavy) ──
-results/
+#results/
 models/
 *.pt
 *.pth

@@ -68,20 +68,41 @@ class LabelScaler:
 
 # ── Band statistics ───────────────────────────────────────────────────────────
 
-def compute_band_stats(tif_path, n_strips=40):
-    """Per-band (p2, p98) by sampling n_strips horizontal strips."""
+def compute_band_stats(tif_path, n_samples=40, tile_size=256):
+    """
+    Per-band (p2, p98) by sampling small tiles scattered across the raster.
+    Uses tile_size x tile_size windows to avoid GDAL block cache issues.
+    """
     with rasterio.open(tif_path) as src:
-        H, W  = src.height, src.width
-        step  = max(H // n_strips, 1)
-        accum = [[] for _ in range(src.count)]
-        for r in range(0, H, step):
-            win  = riow.Window(0, r, W, 1)
-            data = src.read(window=win)
-            for i in range(src.count):
-                v = data[i, 0, :].astype(np.float32)
-                v = v[v > 0]
-                if len(v) > 0:
-                    accum[i].append(v)
+        H, W   = src.height, src.width
+        n_cols = max(W // tile_size, 1)
+        n_rows = max(H // tile_size, 1)
+        step_r = max(n_rows // max(int(np.sqrt(n_samples)), 1), 1)
+        step_c = max(n_cols // max(int(np.sqrt(n_samples)), 1), 1)
+        accum  = [[] for _ in range(src.count)]
+
+        for ri in range(0, n_rows, step_r):
+            for ci in range(0, n_cols, step_c):
+                r0 = ri * tile_size
+                c0 = ci * tile_size
+                h  = min(tile_size, H - r0)
+                w  = min(tile_size, W - c0)
+                if h <= 0 or w <= 0:
+                    continue
+                try:
+                    win  = riow.Window(col_off=c0, row_off=r0,
+                                       width=w, height=h)
+                    data = src.read(window=win)
+                    for i in range(src.count):
+                        v = data[i].astype(np.float32).ravel()
+                        v = v[v > 0]
+                        if len(v) > 0:
+                            # сохраняем выборку, не все пиксели
+                            step = max(len(v) // 500, 1)
+                            accum[i].append(v[::step])
+                except Exception:
+                    continue
+
     stats = []
     for i in range(len(accum)):
         if not accum[i]:
@@ -437,7 +458,9 @@ def apply_gbr_tiled(tif_path, models, scalers, target_names, band_stats, meta,
 # ── Save / utils ──────────────────────────────────────────────────────────────
 
 def save_nutrient_geotiff(pred_map, meta, out_path, target_names):
-    out_meta = {**meta, "count": pred_map.shape[0], "dtype": "float32", "compress": "lzw"}
+    # BIGTIFF required: 12 bands * H * W * float32 easily exceeds 4GB standard TIFF limit
+    out_meta = {**meta, "count": pred_map.shape[0], "dtype": "float32",
+                "compress": "lzw", "BIGTIFF": "YES"}
     with rasterio.open(out_path, "w", **out_meta) as dst:
         for i, name in enumerate(target_names):
             dst.write(pred_map[i], i+1)
