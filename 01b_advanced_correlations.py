@@ -35,37 +35,88 @@ from analysis.dependence import (
 
 def plot_measure_comparison(df_long, measures, out_dir, dpi=150):
     """
-    Тепловые карты для каждой меры зависимости рядом.
-    df_long: строки = (element, index), столбцы = меры.
-    """
-    fig, axes = plt.subplots(1, len(measures),
-                              figsize=(5 * len(measures), 8))
-    if len(measures) == 1:
-        axes = [axes]
+    Для каждой меры зависимости строит отдельную тепловую карту
+    со ВСЕМИ индексами. Обе даты показаны рядом как отдельные
+    группы столбцов (date1_element, date2_element).
 
-    for ax, meas in zip(axes, measures):
-        # Агрегируем по датам перед pivot (берём макс |значение| по абсолютной величине)
-        df_agg = (df_long.groupby(["index", "element"])[meas]
-                  .apply(lambda s: s.loc[s.abs().idxmax()] if s.notna().any() else np.nan)
-                  .reset_index())
-        pivot = df_agg.pivot(index="index", columns="element", values=meas)
+    Дополнительно сохраняет отдельный PNG и CSV для каждой меры.
+    """
+    dates = sorted(df_long["date"].dropna().unique())
+
+    for meas in measures:
+        # ── Pivot: строки = индексы, столбцы = (date, element) ──────────────
+        sub = df_long[["index", "element", "date", meas]].dropna(subset=[meas])
+        if sub.empty:
+            continue
+
+        # Создаём составное имя столбца: "date1 | N"
+        sub = sub.copy()
+        sub["col"] = sub["date"] + " | " + sub["element"].str.replace("_мг_кг","").str.replace("_%","").str.replace("Нитраты","NO₃")
+
+        try:
+            pivot = sub.pivot_table(index="index", columns="col",
+                                     values=meas, aggfunc="mean")
+        except Exception:
+            continue
+
+        # Сортируем строки (индексы) по max |r| убыванию
         pivot = pivot.reindex(
             pivot.abs().max(axis=1).sort_values(ascending=False).index)
-        sns.heatmap(pivot, ax=ax, cmap="RdBu_r", center=0,
-                    vmin=-0.6, vmax=0.6,
-                    linewidths=0.3, linecolor="white",
-                    cbar_kws={"shrink": 0.6})
-        ax.set_title(meas, fontsize=11)
-        ax.set_xlabel(""); ax.set_ylabel("")
-        ax.tick_params(axis="x", rotation=45, labelsize=8)
+
+        # Сортируем столбцы: сначала date1, потом date2
+        ordered_cols = sorted(pivot.columns,
+                               key=lambda c: (c.split(" | ")[0], c.split(" | ")[1]))
+        pivot = pivot[ordered_cols]
+
+        # Сохраняем CSV для этой меры
+        pivot.to_csv(Path(out_dir) / f"heatmap_{meas}.csv",
+                     float_format="%.4f")
+
+        # ── Размер фигуры адаптируется под число индексов ───────────────────
+        n_rows = len(pivot)
+        n_cols = len(pivot.columns)
+        fig_h  = max(8, n_rows * 0.28)
+        fig_w  = max(10, n_cols * 0.9)
+
+        fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+
+        # Цветовая шкала: для dCor/MI только положительные
+        if meas in ("dCor", "MI"):
+            vmin, vmax, center = 0, 0.6, None
+            cmap = "YlOrRd"
+        else:
+            vmin, vmax, center = -0.6, 0.6, 0
+            cmap = "RdBu_r"
+
+        sns.heatmap(pivot, ax=ax, cmap=cmap, center=center,
+                    vmin=vmin, vmax=vmax,
+                    linewidths=0.2, linecolor="white",
+                    cbar_kws={"shrink": 0.5, "pad": 0.02})
+
+        # Разделительная вертикальная линия между датами
+        if len(dates) == 2:
+            n_date1_cols = sum(1 for c in ordered_cols if c.startswith(dates[0]))
+            ax.axvline(x=n_date1_cols, color="black", lw=2, ls="--", alpha=0.6)
+            ax.text(n_date1_cols / 2, -0.8, dates[0],
+                    ha="center", fontsize=9, color="gray",
+                    transform=ax.get_xaxis_transform())
+            ax.text(n_date1_cols + (n_cols - n_date1_cols) / 2, -0.8, dates[1],
+                    ha="center", fontsize=9, color="gray",
+                    transform=ax.get_xaxis_transform())
+
+        ax.set_title(f"{meas} — все индексы × нутриенты (обе даты)",
+                     fontsize=11, pad=12)
+        ax.set_xlabel("Нутриент (date | name)", fontsize=9)
+        ax.set_ylabel("Индекс", fontsize=9)
+        ax.tick_params(axis="x", rotation=45, labelsize=7)
         ax.tick_params(axis="y", labelsize=7)
 
-    plt.suptitle("Сравнение мер зависимости", fontsize=13, y=1.02)
-    plt.tight_layout()
-    fig.savefig(Path(out_dir) / "dependence_comparison.png",
-                dpi=dpi, bbox_inches="tight")
-    plt.close(fig)
-    print(f"  saved: dependence_comparison.png")
+        plt.tight_layout()
+        out_path = Path(out_dir) / f"heatmap_{meas}.png"
+        fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  saved: heatmap_{meas}.png  "
+              f"({n_rows} индексов × {n_cols} столбцов)")
 
 
 def plot_pearson_vs_dcor(df_long, out_dir, dpi=150):
@@ -245,6 +296,13 @@ def run(args):
 
     plot_measure_comparison(df, avail_m, out, dpi)
     plot_pearson_vs_dcor(df, out, dpi)
+
+    # ── Дополнительно: сводный файл per-date ─────────────────────────────
+    for dk in df["date"].unique():
+        sub = df[df["date"] == dk].copy()
+        sub.to_csv(f"{out}/dependence_{dk}.csv",
+                   index=False, float_format="%.6f")
+    print(f"  Сохранены файлы dependence_date1.csv / dependence_date2.csv")
 
     # ── Сводная таблица: лучший индекс по каждому нутриенту × мере ──────────
     print(f"\n{'='*65}")

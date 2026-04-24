@@ -5,40 +5,62 @@
 # ── Пути к данным ──────────────────────────────────────────
 
 paths:
-  # Мультиспектральные .gpkg файлы
+  # Мультиспектральные .gpkg файлы (MicaSense RedEdge-M)
   multi:
-    date1: "D:/Diplom_Magistr/experience_2023/multik/20230529/1?_05_29.gpkg"      
-    date2: "D:/Diplom_Magistr/experience_2023/multik/20230608/1?_06_08.gpkg"      
+    date1: "D:/Diplom_Magistr/experience_2023/multik/20230529/1?_05_29.gpkg"
+    date2: "D:/Diplom_Magistr/experience_2023/multik/20230608/1?_06_08.gpkg"
+
+  # Мультиспектральные .gpkg файлы (Pollux)
+  # Паттерны аналогичные MicaSense
+  #multi_pollux:
+    #date1: "D:/Diplom_Magistr/experience_2023/multik/20230529/Pollux/1?_05_29_pollux.gpkg"
+    #date2: "D:/Diplom_Magistr/experience_2023/multik/20230608/Pollux/1?_06_08_pollux.gpkg"
+
+  # Ортомозаики .tif (для window-признаков, 01c и 02_ml_honest.py)
+  # Лучшие камеры по результатам 01c: Pollux 0608, MicaSense 0619
+  map_tif:
+    # MicaSense
+    "20230529_Micasense": "D:/Diplom_Magistr/Analysis of microelement content in plants using vegetation indices and ML/V6/data/map_tif/20230529_F14_Micasense.tif"
+    "20230608_Micasense": "D:/Diplom_Magistr/Analysis of microelement content in plants using vegetation indices and ML/V6/data/20230608_F14_Micasense.tif"
+    "20230619_Micasense": "D:/Diplom_Magistr/Analysis of microelement content in plants using vegetation indices and ML/V6/data/20230619_F14_Micasense.tif"
+    # Pollux (лучший для большинства нутриентов по итогам 01c)
+    "20230529_Pollux":    "D:/Diplom_Magistr/Analysis of microelement content in plants using vegetation indices and ML/V6/data/20230529_F14_Pollux.tif"
+    "20230608_Pollux":    "D:/Diplom_Magistr/Analysis of microelement content in plants using vegetation indices and ML/V6/data/20230608_F14_Pollux.tif"
+    # Основная ортомозаика для 02_ml_honest.py (Pollux 0608 — лучшая камера)
+    primary: "D:/Diplom_Magistr/Analysis of microelement content in plants using vegetation indices and ML/V6/data/20230608_F14_Pollux.tif"
 
   # Гиперспектральные данные
   hyper:
     date1_folder: "D:/Diplom_Magistr/experience_2023/Giper/polygon/20230529"
     date2_folder: "D:/Diplom_Magistr/experience_2023/Giper/polygon/20230608"
     wavelength_map: "D:/Diplom_Magistr/experience_2023/Giper/polygon/giper_polygon.xlsx"
-    # Собранные xlsx (если папки недоступны)
-    #date1_xlsx: "D:/Diplom_Magistr/Analysis of microelement content in plants using vegetation indices and ML/V6/data/hyper/hyper_aggregated_date1.xlsx"
-    #date2_xlsx: "D:/Diplom_Magistr/Analysis of microelement content in plants using vegetation indices and ML/V6/data/hyper/hyper_aggregated_date2.xlsx"
 
   # Химический анализ
   chemistry:
-    sampling1: "D:/Diplom_Magistr/experience_2023/Хим_Лаб_АФИ/1_05_29.xlsx"
-    sampling2: "D:/Diplom_Magistr/experience_2023/Хим_Лаб_АФИ/2_06_08.xlsx"
+    sampling1: "D:/Diplom_Magistr/Analysis of microelement content in plants using vegetation indices and ML/V6/data/chem/1_05_29.xlsx"
+    sampling2: "D:/Diplom_Magistr/Analysis of microelement content in plants using vegetation indices and ML/V6/data/chem/2_06_08.xlsx"
+
+  # Результаты этапа 2 (входные данные для этапа 3)
+  stage2_results:
+    variograms:    "results/01e_variograms"
+    window_feats:  "results/01c_window"
+    textures:      "results/01d_textures"
+    dependence:    "results/01b_advanced"
 
   # Выходные папки
   output:
-    stat_multi:  "results/01_stat_multi"
-    stat_hyper:  "results/02_stat_hyper"
-    ml_multi:    "results/03_ml_multi"
-    ml_hyper:    "results/04_ml_hyper"
-    ml_fusion:   "results/05_ml_fusion"
+    stat_multi:    "results/01_stat_multi"
+    stat_hyper:    "results/02_stat_hyper"
+    ml_multi:      "results/03_ml_multi"
+    ml_hyper:      "results/04_ml_hyper"
+    ml_fusion:     "results/05_ml_fusion"
+    honest_ml:     "results/02_honest"
 
 
 # ── Камера MicaSense RedEdge-M ─────────────────────────────
 
 camera:
   name: "MicaSense RedEdge-M"
-  # Номер из имени файла → название канала
-  # Файлы: 11_05_29.gpkg, 12_05_29.gpkg, ..., 15_05_29.gpkg
   band_map:
     "11": "Blue"
     "12": "Green"
@@ -52,27 +74,51 @@ camera:
     RedEdge: 717.0
     NIR: 840.0
 
+# ── Камера Pollux ──────────────────────────────────────────
+# Такие же 5 каналов, но другие центральные длины волн
+# (точные значения уточни у научрука)
+camera_pollux:
+  name: "Pollux"
+  band_map:
+    "11": "Blue"
+    "12": "Green"
+    "13": "Red"
+    "14": "RedEdge"
+    "15": "NIR"
+  wavelengths:
+    Blue: 450.0      # уточнить
+    Green: 550.0     # уточнить
+    Red: 650.0       # уточнить
+    RedEdge: 705.0   # уточнить — возможно, именно это объясняет превосходство Pollux
+    NIR: 850.0       # уточнить
 
-# ── Гиперспектр: правила парсинга имён файлов ─────────────
+
+# ── Гиперспектр ────────────────────────────────────────────
 
 hyper_naming:
   prefix_length: 1
   file_extension: ".gpkg"
-  # Столбцы в .gpkg
   value_column: "_mean"
   id_column: "id"
-  # Минимум валидных каналов для включения точки
   min_valid_bands: 50
+
+hyper_preprocessing:
+  variants:
+    raw:        ["smooth"]
+    deriv1:     ["smooth", "deriv1"]
+    deriv1_snv: ["smooth", "deriv1", "snv"]
+    snv:        ["snv"]
+    deriv2:     ["smooth", "deriv2"]
+  sg_window: 11
+  sg_polyorder: 2
 
 
 # ── Химический анализ ──────────────────────────────────────
 
 chemistry:
-  # ID offset: для 2-го отбора пробы 101-200 → точки 1-100
   id_offsets:
     sampling1: 0
     sampling2: 0
-  # Названия столбцов в .doc файлах (16 штук после ID)
   columns:
     - "Биомасса_сырая_г"
     - "Биомасса_сухая_г"
@@ -90,7 +136,6 @@ chemistry:
     - "Cu_мг_кг"
     - "Zn_мг_кг"
     - "Co_мг_кг"
-  # Целевые элементы для анализа (без служебных)
   target_elements:
     - "N_%"
     - "P_%"
@@ -104,27 +149,27 @@ chemistry:
     - "Cu_мг_кг"
     - "Zn_мг_кг"
     - "Co_мг_кг"
-  # Короткие имена для графиков
   short_names:
-    "N_%": "N"
-    "P_%": "P"
-    "K_%": "K"
-    "Ca_%": "Ca"
-    "Mg_%": "Mg"
-    "S_%": "S"
+    "N_%":           "N"
+    "P_%":           "P"
+    "K_%":           "K"
+    "Ca_%":          "Ca"
+    "Mg_%":          "Mg"
+    "S_%":           "S"
     "Нитраты_мг_кг": "NO₃"
-    "Fe_мг_кг": "Fe"
-    "Mn_мг_кг": "Mn"
-    "Cu_мг_кг": "Cu"
-    "Zn_мг_кг": "Zn"
-    "Co_мг_кг": "Co"
+    "Fe_мг_кг":      "Fe"
+    "Mn_мг_кг":      "Mn"
+    "Cu_мг_кг":      "Cu"
+    "Zn_мг_кг":      "Zn"
+    "Co_мг_кг":      "Co"
+  # Связь дат съёмки с датами химии
   date_sampling_map:
-    "date1": "sampling1"
-    "date2": "sampling2"
-    "05_29": "sampling1"
-    "06_08": "sampling2"
-    "20230529": "sampling1"
-    "20230608": "sampling2"
+    "date1":     "sampling1"
+    "date2":     "sampling2"
+    "05_29":     "sampling1"
+    "06_08":     "sampling2"
+    "20230529":  "sampling1"
+    "20230608":  "sampling2"
 
 
 # ── Параметры статистического анализа ──────────────────────
@@ -132,31 +177,60 @@ chemistry:
 statistics:
   methods: ["pearson", "spearman", "kendall"]
   alpha: 0.05
-  index_tiers: [1, 2, 3]      # Тиры вегетативных индексов
-  min_samples: 10              # Мин. точек для корреляции
+  index_tiers: [1, 2, 3]
+  min_samples: 10
   scatter_top_n: 12
 
-# Предобработки гиперспектра
-hyper_preprocessing:
-  variants:
-    raw:        ["smooth"]
-    deriv1:     ["smooth", "deriv1"]
-    deriv1_snv: ["smooth", "deriv1", "snv"]
-    snv:        ["snv"]
-    deriv2:     ["smooth", "deriv2"]
-  sg_window: 11
-  sg_polyorder: 2
+
+# ── Параметры CV (Этап 3) ──────────────────────────────────
+
+cv:
+  # Радиусы буфера из 01e_variograms (Moran's I + range_m)
+  # Используются в buffered-LOO. Ключ — element из chemistry.target_elements
+  buffer_per_nutrient:
+    "N_%":           30
+    "P_%":          100
+    "K_%":           86
+    "Ca_%":          30
+    "Mg_%":          30
+    "S_%":           55
+    "Нитраты_мг_кг": 30
+    "Fe_мг_кг":     100
+    "Mn_мг_кг":     100
+    "Cu_мг_кг":      30
+    "Zn_мг_кг":      31
+    "Co_мг_кг":      76
+  # Единый буфер если нужно одно число
+  global_buffer_m: 50
+  # Путь к CSV с буферами (генерируется 01e_variograms.py)
+  buffer_csv: "results/01e_variograms/recommended_buffers.csv"
+
+  # Параметры BCa bootstrap
+  bca_b: 2000
+  # Число перестановок permutation test
+  n_perm: 199
+  # Размер окна для window-признаков (по итогам 01c)
+  window_size: 7
+  # Внутренний CV для Optuna nested CV
+  inner_folds: 5
+  # Число trials Optuna
+  optuna_trials: 40
+  # C-Mixup параметр alpha
+  cmixup_alpha: 2.0
+
+  # Основная ортомозаика для 02_ml_honest.py
+  # (Pollux 0608 — лучшая по результатам 01c: Fe=0.402, K=0.341, P=0.409)
+  primary_ortho_key: "20230608_Pollux"
 
 
 # ── Параметры ML ───────────────────────────────────────────
 
 ml:
-  multi_pca_components: 15 
+  multi_pca_components: 15
   mixup_n_aug: null
   models: ["PLSR", "ElasticNet", "RF", "GBR", "SVR", "XGBoost"]
   cv_folds: 5
-  cv_strategy: "kfold"         # kfold | repeated_kfold | spatial
-  # Feature sets для гиперспектра
+  cv_strategy: "kfold"
   hyper_feature_sets:
     - "raw_smooth"
     - "deriv1_snv"
@@ -170,5 +244,5 @@ ml:
 # ── Визуализация ───────────────────────────────────────────
 
 plots:
-  dpi: 150
+  dpi: 300
   format: "png"
